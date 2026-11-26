@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <!--
+      このページ自身は、外部はもちろん自分のサーバーにも通信できない (connect-src 'none')。
+      スクリプトとスタイルは同じ場所に置いたファイルだけを読み込み、インラインのものは実行されない。
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types kagi-sw">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+    <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="かぎ家計簿">
+    <title>かぎ家計簿</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="css/app.css">
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="overlays"></div>
+    <div id="toasts" popover="manual" role="status" aria-live="polite"></div>
+    <div id="cover" aria-hidden="true"><img src="icons/icon.svg" alt="" width="72" height="72"></div>
+    <noscript><p class="noscript">かぎ家計簿を使うには、JavaScript を有効にしてください。</p></noscript>
+  </body>
+</html>

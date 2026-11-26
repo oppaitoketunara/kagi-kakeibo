@@ -1,0 +1,25 @@
+body {
+  margin: 24px;
+  font: 14px/1.6 system-ui, -apple-system, "Hiragino Sans", sans-serif;
+  color: #0b0b0b;
+  background: #f9f9f7;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+#summary {
+  font-weight: 600;
+}
+
+#summary.pass,
+li.pass {
+  color: #006300;
+}
+
+#summary.fail,
+li.fail {
+  color: #d03b3b;
+  font-weight: 600;
+}
