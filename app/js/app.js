@@ -111,6 +111,8 @@ export class App {
     if (navigator.storage && typeof navigator.storage.persist === 'function') {
       navigator.storage.persist().catch(() => {});
     }
+    // どの記録からも使われていないレシート写真が残っていたら片付ける
+    this.vault.cleanupReceipts().catch(() => {});
     this.setScreen(renderMain(this));
     // 鍵の計算を待つあいだにアプリを離れていた場合は、ここで改めて「離れた」ときの処理をする。
     // (離れた時点ではまだロック中だったので、何も起きていない)

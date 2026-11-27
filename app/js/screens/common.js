@@ -293,16 +293,31 @@ export function monthSwitcher(app) {
   );
 }
 
+/** カテゴリの色(css の .hue-○○)のクラス名。 */
+export function hueClass(category) {
+  return category && category.color ? `hue-${category.color}` : 'hue-stone';
+}
+
+/** カテゴリの頭文字を、そのカテゴリの色で塗ったバッジ。色に加えて文字でも見分けられる。 */
+export function categoryBadge(category) {
+  return h('span', { class: `badge ${hueClass(category)}`, 'aria-hidden': 'true' }, category ? category.mark : '?');
+}
+
 /** 記録 1 件の行。`onClick` を渡すとボタンになる。 */
 export function transactionRow(app, transaction, onClick = null) {
   const category = app.state.categories.find((item) => item.id === transaction.categoryId);
   const isIncome = transaction.type === 'income';
   const children = [
-    h('span', { class: isIncome ? 'badge badge-income' : 'badge', 'aria-hidden': 'true' }, category ? category.mark : '?'),
+    categoryBadge(category),
     h(
       'span',
       { class: 'row-main' },
-      h('span', { class: 'row-title' }, category ? category.name : '(不明なカテゴリ)'),
+      h(
+        'span',
+        { class: 'row-title' },
+        category ? category.name : '(不明なカテゴリ)',
+        transaction.receiptId === null ? null : h('span', { class: 'row-mark', title: 'レシートの写真あり' }, icon('camera', { size: 15 })),
+      ),
       transaction.memo === '' ? null : h('span', { class: 'row-memo' }, transaction.memo),
     ),
     // 収入は色に加えて + の符号でも区別する

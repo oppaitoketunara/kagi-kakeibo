@@ -5,6 +5,7 @@ import { KDF_ITERATIONS } from '../crypto.js';
 import { formatDateTime } from '../format.js';
 import {
   AUTO_LOCK_CHOICES,
+  CATEGORY_COLORS,
   LIMITS,
   addCategory,
   categoryUsage,
@@ -13,6 +14,7 @@ import {
   renameCategory,
   setAutoLock,
   setCategoryArchived,
+  setCategoryColor,
   setMaskAmounts,
   setMonthlyBudget,
   toCsv,
@@ -22,6 +24,7 @@ import { MIN_LENGTH, assessPassphrase } from '../passphrase.js';
 import { ConflictError } from '../vault.js';
 import { APP_VERSION } from '../version.js';
 import {
+  categoryBadge,
   describeAuthError,
   installHint,
   messageBox,
@@ -32,6 +35,12 @@ import {
   usernameField,
 } from './common.js';
 import { confirmWithPassphrase, offerFile, openRestore } from './dialogs.js';
+
+const COLOR_LABELS = {
+  orange: 'オレンジ', amber: 'こはく色', lime: '黄緑', green: '緑', emerald: 'エメラルド', teal: '青緑',
+  cyan: '水色', sky: '空色', blue: '青', indigo: 'あい色', violet: 'すみれ色', purple: '紫',
+  fuchsia: '赤紫', pink: 'ピンク', rose: 'ばら色', red: '赤', slate: '青灰色', stone: '灰色',
+};
 
 const AUTO_LOCK_LABELS = { 0: 'アプリを離れたらすぐ', 30: '離れて 30 秒後', 60: '離れて 1 分後', 300: '離れて 5 分後' };
 
@@ -79,6 +88,7 @@ async function exportBackup(app) {
       'すべての記録を、暗号化したまま 1 つのファイルに書き出します。',
       '復元には、いまのパスフレーズが必要です。あとでパスフレーズを変えても、このファイルは変える前のパスフレーズで開きます。',
       '端末の故障や機種変更に備えて、この端末の外に保管してください。',
+      'レシートの写真は容量が大きいため、このファイルには含まれません。写真はこの端末の中だけに残ります。',
     ],
     filename: `kagi-kakeibo-backup-${todayString()}.json`,
     mime: 'application/json',
@@ -246,6 +256,28 @@ function editCategory(app, category, onChanged) {
         spellcheck: 'false',
         value: category.name,
       });
+      // 色の選択。色の名前は読み上げ用にも付ける。
+      let color = category.color;
+      const swatches = CATEGORY_COLORS.map((name) =>
+        h(
+          'button',
+          {
+            class: `swatch hue-${name}`,
+            type: 'button',
+            'aria-label': COLOR_LABELS[name],
+            'aria-pressed': String(name === color),
+            on: {
+              click: () => {
+                color = name;
+                swatches.forEach((swatch, index) => {
+                  swatch.setAttribute('aria-pressed', String(CATEGORY_COLORS[index] === color));
+                });
+              },
+            },
+          },
+          icon('check', { size: 18 }),
+        ),
+      );
       const error = messageBox();
       const apply = async (result) => {
         if (!result.ok) {
@@ -264,18 +296,21 @@ function editCategory(app, category, onChanged) {
           on: {
             submit: (event) => {
               event.preventDefault();
-              if (app.vault.isUnlocked) apply(renameCategory(app.state, category.id, input.value));
+              if (!app.vault.isUnlocked) return;
+              const renamed = renameCategory(app.state, category.id, input.value);
+              apply(renamed.ok ? setCategoryColor(app.state, category.id, color) : renamed);
             },
           },
         },
         h('h2', { class: 'dialog-title' }, 'カテゴリを編集'),
         h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'category-name' }, '名前'), input),
+        h('div', { class: 'field' }, h('p', { class: 'field-label' }, '色'), h('div', { class: 'swatches', role: 'group', 'aria-label': '色' }, swatches)),
         h('p', { class: 'dialog-text' }, used > 0 ? `${used} 件の記録で使われています。` : 'まだ記録では使われていません。'),
         error.node,
         h(
           'div',
           { class: 'dialog-actions is-stacked' },
-          h('button', { class: 'btn btn-primary', type: 'submit' }, '名前を保存'),
+          h('button', { class: 'btn btn-primary', type: 'submit' }, '名前と色を保存'),
           h(
             'button',
             {
@@ -340,7 +375,7 @@ function openCategoryEditor(app) {
                 h(
                   'button',
                   { class: 'row row-button', type: 'button', on: { click: () => editCategory(app, category, refresh) } },
-                  h('span', { class: 'badge', 'aria-hidden': 'true' }, category.mark),
+                  categoryBadge(category),
                   h(
                     'span',
                     { class: 'row-main' },
@@ -547,7 +582,7 @@ export function renderSettings(app) {
       ),
       actionRow({
         title: 'カテゴリを編集',
-        description: '追加・名前の変更・入力画面からの非表示',
+        description: '追加・名前や色の変更・入力画面からの非表示',
         onClick: () => openCategoryEditor(app),
       }),
     ),

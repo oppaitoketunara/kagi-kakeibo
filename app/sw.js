@@ -8,7 +8,7 @@
 'use strict';
 
 // --- BEGIN GENERATED (tools/update_sw.py) ---
-const VERSION = '5540220018b38bd4';
+const VERSION = '20f04b939e13db6a';
 const ASSETS = [
   './',
   'css/app.css',
@@ -21,6 +21,7 @@ const ASSETS = [
   'js/crypto.js',
   'js/dom.js',
   'js/format.js',
+  'js/image.js',
   'js/main.js',
   'js/model.js',
   'js/passphrase.js',

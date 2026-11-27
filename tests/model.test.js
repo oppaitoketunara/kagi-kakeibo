@@ -1,5 +1,6 @@
 import { assert, deepEqual, equal, test, throws } from './harness.js';
 import {
+  CATEGORY_COLORS,
   InvalidStateError,
   LIMITS,
   activeCategories,
@@ -22,6 +23,7 @@ import {
   renameCategory,
   setAutoLock,
   setCategoryArchived,
+  setCategoryColor,
   setMaskAmounts,
   setMonthlyBudget,
   shiftMonth,
@@ -303,4 +305,49 @@ test('CSV: 引用符・改行を正しく扱い、数式として実行されな
   equal(lines[1], '"2026-10-31","支出","食費","3000","先月"', '古い順');
   equal(lines[5], '"2026-11-25","収入","給与","250000",""');
   equal(lines[6], '"2026-11-26","支出","その他","1","\'=1+1"');
+});
+
+test('カテゴリの色: 既定の色が付き、追加したものは使われていない色から始まる', () => {
+  const state = createInitialState();
+  for (const category of state.categories) assert(CATEGORY_COLORS.includes(category.color), category.name);
+  const expenseColors = state.categories.filter((item) => item.type === 'expense').map((item) => item.color);
+  equal(new Set(expenseColors).size, expenseColors.length, '支出カテゴリの既定の色が重なっている');
+
+  const added = addCategory(state, 'expense', 'ペット');
+  assert(added.ok);
+  assert(!expenseColors.includes(added.value.color), `すでに使われている色になった: ${added.value.color}`);
+
+  assert(setCategoryColor(state, added.value.id, 'pink').ok);
+  equal(state.categories.find((item) => item.id === added.value.id).color, 'pink');
+  assert(!setCategoryColor(state, added.value.id, 'url(javascript:alert(1))').ok, '色の名前以外を受け付けた');
+  assert(!setCategoryColor(state, 'missing', 'pink').ok);
+});
+
+test('以前の版のデータ: 色・写真の項目がなくても読み込め、足りないものは補われる', () => {
+  const old = JSON.parse(JSON.stringify(filled()));
+  delete old.mediaKey;
+  for (const category of old.categories) delete category.color;
+  for (const item of old.transactions) delete item.receiptId;
+  old.categories.push({ id: 'custom-1', type: 'expense', name: '自作', mark: '自', archived: false });
+  old.categories[0].color = 'not-a-color';
+  const state = validateState(old);
+  equal(state.categories.find((item) => item.id === 'exp-daily').color, 'teal', '既定カテゴリは既定の色');
+  equal(state.categories[0].color, 'orange', '知らない色の名前は既定の色に戻す');
+  assert(CATEGORY_COLORS.includes(state.categories.find((item) => item.id === 'custom-1').color));
+  assert(state.transactions.every((item) => item.receiptId === null));
+  assert(/^[A-Za-z0-9+/]{43}=$/.test(state.mediaKey), '写真用の鍵が作られていない');
+  assert(validateState(old).mediaKey !== state.mediaKey, '写真用の鍵が毎回同じ');
+  equal(validateState(state).mediaKey, state.mediaKey, '一度できた鍵は保たれる');
+});
+
+test('レシートの参照: ID の形をしたものだけを受け付ける', () => {
+  const state = createInitialState();
+  const base = { type: 'expense', amount: 100, date: '2026-11-03', categoryId: 'exp-food', memo: '' };
+  equal(addTransaction(state, base).value.receiptId, null);
+  equal(addTransaction(state, { ...base, receiptId: 'abc-123' }).value.receiptId, 'abc-123');
+  equal(addTransaction(state, { ...base, receiptId: '../../vault' }).value.receiptId, null);
+  equal(addTransaction(state, { ...base, receiptId: { toString: () => 'x' } }).value.receiptId, null);
+  const copy = JSON.parse(JSON.stringify(state));
+  copy.transactions[0].receiptId = 'vault:../x';
+  throws(() => validateState(copy), InvalidStateError);
 });

@@ -113,6 +113,14 @@ class Store {
     });
   }
 
+  /** 保存されているすべてのキー。 */
+  keys() {
+    return this.#run('readonly', (store, done) => {
+      const request = store.getAllKeys();
+      request.onsuccess = () => done(request.result);
+    });
+  }
+
   clear() {
     return this.#run('readwrite', (store) => {
       store.clear();

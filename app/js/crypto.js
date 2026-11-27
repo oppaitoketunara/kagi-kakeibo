@@ -178,6 +178,48 @@ export async function decryptData(dek, data) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 付属データ(レシート写真)用: 保管庫の中にしまってある鍵で、1 件ずつ暗号化する
+// ---------------------------------------------------------------------------
+
+/** 32 バイトの鍵を、取り出し不可の AES-256-GCM 鍵として読み込む。 */
+export function importDataKey(raw) {
+  return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+function contextAad(context) {
+  return encoder.encode([FORMAT, `v${FORMAT_VERSION}`, context].join('|'));
+}
+
+/**
+ * `context` (用途と ID) を結び付けて暗号化する。
+ * 保存された暗号文を別の記録のものと入れ替えられても、復号に失敗して気づけるようにするため。
+ */
+export async function sealBytes(key, plaintext, context) {
+  const iv = randomBytes(IV_BYTES);
+  const ct = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: contextAad(context), tagLength: 128 }, key, plaintext),
+  );
+  return { iv, ct };
+}
+
+export async function openBytes(key, box, context) {
+  if (box === null || typeof box !== 'object' || !isBytes(box.iv, IV_BYTES) || !isBytes(box.ct, TAG_BYTES, MAX_DATA_BYTES)) {
+    throw new CorruptVaultError('bad sealed data');
+  }
+  try {
+    return new Uint8Array(
+      await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: box.iv, additionalData: contextAad(context), tagLength: 128 },
+        key,
+        box.ct,
+      ),
+    );
+  } catch {
+    throw new CorruptVaultError('decryption failed');
+  }
+}
+
 function isBytes(value, min, max = min) {
   return value instanceof Uint8Array && value.length >= min && value.length <= max;
 }

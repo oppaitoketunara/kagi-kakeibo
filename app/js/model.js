@@ -3,6 +3,8 @@
 // 状態 (state) はただの JSON オブジェクト。ここにある関数だけがそれを検査・変更・集計する。
 // 画面にもストレージにも依存しない。
 
+import { randomBytes, toBase64 } from './crypto.js';
+
 export const SCHEMA_VERSION = 1;
 
 export const LIMITS = Object.freeze({
@@ -27,33 +29,49 @@ export class InvalidStateError extends Error {
 
 const TYPES = Object.freeze(['expense', 'income']);
 
-const DEFAULT_CATEGORIES = Object.freeze([
-  ['exp-food', 'expense', '食費', '食'],
-  ['exp-daily', 'expense', '日用品', '日'],
-  ['exp-housing', 'expense', '住居', '住'],
-  ['exp-utility', 'expense', '水道・光熱', '光'],
-  ['exp-telecom', 'expense', '通信', '通'],
-  ['exp-transport', 'expense', '交通', '交'],
-  ['exp-medical', 'expense', '医療', '医'],
-  ['exp-education', 'expense', '教育', '教'],
-  ['exp-leisure', 'expense', '娯楽', '娯'],
-  ['exp-clothing', 'expense', '衣服・美容', '衣'],
-  ['exp-social', 'expense', '交際', '際'],
-  ['exp-insurance', 'expense', '保険', '保'],
-  ['exp-tax', 'expense', '税金', '税'],
-  ['exp-other', 'expense', 'その他', '他'],
-  ['inc-salary', 'income', '給与', '給'],
-  ['inc-bonus', 'income', '賞与', '賞'],
-  ['inc-side', 'income', '副業', '副'],
-  ['inc-other', 'income', 'その他', '他'],
+/** カテゴリに付けられる色の名前(実際の色は css の .hue-○○ で決める)。 */
+export const CATEGORY_COLORS = Object.freeze([
+  'orange', 'amber', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo',
+  'violet', 'purple', 'fuchsia', 'pink', 'rose', 'red', 'slate', 'stone',
 ]);
+
+const DEFAULT_CATEGORIES = Object.freeze([
+  ['exp-food', 'expense', '食費', '食', 'orange'],
+  ['exp-daily', 'expense', '日用品', '日', 'teal'],
+  ['exp-housing', 'expense', '住居', '住', 'indigo'],
+  ['exp-utility', 'expense', '水道・光熱', '光', 'sky'],
+  ['exp-telecom', 'expense', '通信', '通', 'blue'],
+  ['exp-transport', 'expense', '交通', '交', 'emerald'],
+  ['exp-medical', 'expense', '医療', '医', 'red'],
+  ['exp-education', 'expense', '教育', '教', 'violet'],
+  ['exp-leisure', 'expense', '娯楽', '娯', 'pink'],
+  ['exp-clothing', 'expense', '衣服・美容', '衣', 'fuchsia'],
+  ['exp-social', 'expense', '交際', '際', 'lime'],
+  ['exp-insurance', 'expense', '保険', '保', 'cyan'],
+  ['exp-tax', 'expense', '税金', '税', 'slate'],
+  ['exp-other', 'expense', 'その他', '他', 'stone'],
+  ['inc-salary', 'income', '給与', '給', 'green'],
+  ['inc-bonus', 'income', '賞与', '賞', 'lime'],
+  ['inc-side', 'income', '副業', '副', 'teal'],
+  ['inc-other', 'income', 'その他', '他', 'stone'],
+]);
+
+/** レシート写真を暗号化するための鍵(256 ビットの乱数)。保管庫の暗号文の中にだけ置かれる。 */
+function newMediaKey() {
+  return toBase64(randomBytes(32));
+}
+
+function isMediaKey(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(value);
+}
 
 export function createInitialState(now = new Date()) {
   return {
     schema: SCHEMA_VERSION,
     createdAt: now.toISOString(),
+    mediaKey: newMediaKey(),
     settings: { autoLockSec: 0, monthlyBudget: null, maskAmounts: false, lastBackupAt: null },
-    categories: DEFAULT_CATEGORIES.map(([id, type, name, mark]) => ({ id, type, name, mark, archived: false })),
+    categories: DEFAULT_CATEGORIES.map(([id, type, name, mark, color]) => ({ id, type, name, mark, color, archived: false })),
     transactions: [],
   };
 }
@@ -211,7 +229,14 @@ export function checkTransaction(state, input) {
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return {
     ok: true,
-    value: { type, amount, date, categoryId: category.id, memo: cleanText(input.memo ?? '', LIMITS.memoMax) },
+    value: {
+      type,
+      amount,
+      date,
+      categoryId: category.id,
+      memo: cleanText(input.memo ?? '', LIMITS.memoMax),
+      receiptId: isId(input.receiptId) ? input.receiptId : null,
+    },
   };
 }
 
@@ -374,7 +399,14 @@ export function addCategory(state, type, rawName) {
   if (state.categories.length >= LIMITS.maxCategories) return { ok: false, error: 'カテゴリの数が上限です。' };
   const checked = checkCategoryName(state, type, rawName);
   if (!checked.ok) return checked;
-  const category = { id: newId(), type, name: checked.value, mark: firstMark(checked.value), archived: false };
+  const category = {
+    id: newId(),
+    type,
+    name: checked.value,
+    mark: firstMark(checked.value),
+    color: leastUsedColor(state, type),
+    archived: false,
+  };
   state.categories.push(category);
   return { ok: true, value: category };
 }
@@ -401,6 +433,27 @@ export function setCategoryArchived(state, id, archived) {
 }
 
 /** 記録で一度も使っていないカテゴリだけ削除できる。 */
+/** その種別でいちばん使われていない色(新しいカテゴリが、ほかと見分けやすい色で始まるように)。 */
+function leastUsedColor(state, type) {
+  const counts = new Map(CATEGORY_COLORS.map((color) => [color, 0]));
+  for (const item of state.categories) {
+    if (item.type === type && counts.has(item.color)) counts.set(item.color, counts.get(item.color) + 1);
+  }
+  let best = CATEGORY_COLORS[0];
+  for (const color of CATEGORY_COLORS) {
+    if (counts.get(color) < counts.get(best)) best = color;
+  }
+  return best;
+}
+
+export function setCategoryColor(state, id, color) {
+  const category = state.categories.find((item) => item.id === id);
+  if (category === undefined) return { ok: false, error: 'カテゴリが見つかりません。' };
+  if (!CATEGORY_COLORS.includes(color)) return { ok: false, error: '色を選んでください。' };
+  category.color = color;
+  return { ok: true, value: category };
+}
+
 export function deleteCategory(state, id) {
   const index = state.categories.findIndex((item) => item.id === id);
   if (index === -1) return { ok: false, error: 'カテゴリが見つかりません。' };
@@ -443,14 +496,26 @@ export function validateState(raw) {
 
   if (!Array.isArray(raw.categories) || raw.categories.length > LIMITS.maxCategories) fail('categories');
   const typeOfCategory = new Map();
-  const categories = raw.categories.map((item) => {
+  const defaultColors = new Map(DEFAULT_CATEGORIES.map(([id, , , , color]) => [id, color]));
+  const categories = raw.categories.map((item, index) => {
     if (!isPlainObject(item) || !isId(item.id) || typeOfCategory.has(item.id)) fail('category.id');
     if (!TYPES.includes(item.type)) fail('category.type');
     const name = cleanText(item.name, LIMITS.categoryNameMax);
     if (name === '') fail('category.name');
     const mark = typeof item.mark === 'string' ? cleanText(item.mark, 1) : '';
     typeOfCategory.set(item.id, item.type);
-    return { id: item.id, type: item.type, name, mark: mark === '' ? firstMark(name) : mark, archived: item.archived === true };
+    // 色が付いていないデータ(以前の版で作ったもの)には、既定の色を割り当てる
+    const color = CATEGORY_COLORS.includes(item.color)
+      ? item.color
+      : (defaultColors.get(item.id) ?? CATEGORY_COLORS[index % CATEGORY_COLORS.length]);
+    return {
+      id: item.id,
+      type: item.type,
+      name,
+      mark: mark === '' ? firstMark(name) : mark,
+      color,
+      archived: item.archived === true,
+    };
   });
   for (const type of TYPES) {
     if (!categories.some((category) => category.type === type && !category.archived)) fail(`no active ${type} category`);
@@ -466,6 +531,8 @@ export function validateState(raw) {
     if (!isAmount(item.amount)) fail('transaction.amount');
     if (!isValidDate(item.date)) fail('transaction.date');
     if (typeof item.memo !== 'string') fail('transaction.memo');
+    const receiptId = item.receiptId ?? null;
+    if (receiptId !== null && !isId(receiptId)) fail('transaction.receiptId');
     if (!isTimestamp(item.createdAt) || !isTimestamp(item.updatedAt)) fail('transaction.timestamps');
     return {
       id: item.id,
@@ -474,12 +541,21 @@ export function validateState(raw) {
       date: item.date,
       categoryId: item.categoryId,
       memo: cleanText(item.memo, LIMITS.memoMax),
+      receiptId,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
   });
 
-  return { schema: SCHEMA_VERSION, createdAt: raw.createdAt, settings, categories, transactions };
+  return {
+    schema: SCHEMA_VERSION,
+    createdAt: raw.createdAt,
+    // 写真用の鍵がないデータ(以前の版で作ったもの)には、ここで新しく作る
+    mediaKey: isMediaKey(raw.mediaKey) ? raw.mediaKey : newMediaKey(),
+    settings,
+    categories,
+    transactions,
+  };
 }
 
 // ---------------------------------------------------------------------------

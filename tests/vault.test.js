@@ -340,3 +340,51 @@ test('保管庫: 正しいパスフレーズなら、待ち時間が始まる回
     assert(vault.isUnlocked);
     deepEqual(await vault.throttleState(), { failures: 0, retryAt: 0 });
   }));
+
+test('レシート写真: 暗号化して保存でき、別の記録の写真とすり替えると気づける', () =>
+  withStore(async (store) => {
+    const vault = new Vault(store);
+    await vault.create(PASS, createInitialState());
+    const photo = new TextEncoder().encode('JPEG のつもりの中身: ひみつのレシート 98765円');
+    await vault.putReceipt('r-1', photo);
+    await vault.putReceipt('r-2', new Uint8Array([1, 2, 3]));
+    deepEqual(Array.from(await vault.getReceipt('r-1')), Array.from(photo));
+    equal(await vault.getReceipt('missing'), null);
+    equal(await vault.countReceipts(), 2);
+
+    const stored = await store.get('receipt:r-1');
+    deepEqual(Object.keys(stored).sort(), ['ct', 'iv']);
+    equal(indexOfBytes(stored.ct, new TextEncoder().encode('ひみつのレシート')), -1, '写真が平文で保存されている');
+    equal(indexOfBytes(stored.ct, new TextEncoder().encode('98765')), -1);
+
+    // 保存領域を書き換えられる相手が、r-2 の暗号文を r-1 の場所に置いても開かない
+    await store.put('receipt:r-1', await store.get('receipt:r-2'));
+    await rejects(vault.getReceipt('r-1'), CorruptVaultError);
+    deepEqual(Array.from(await vault.getReceipt('r-2')), [1, 2, 3]);
+  }));
+
+test('レシート写真: パスフレーズを変えても読め、使われていない写真は片付けられ、消去で残らない', () =>
+  withStore(async (store) => {
+    const vault = new Vault(store);
+    await vault.create(PASS, createInitialState());
+    await vault.putReceipt('keep', new Uint8Array([7, 7, 7]));
+    await vault.putReceipt('orphan', new Uint8Array([9]));
+    addTransaction(vault.state, { ...sample(), receiptId: 'keep' });
+    await vault.save();
+
+    await vault.changePassphrase(PASS, NEXT);
+    vault.lock();
+    await rejects(vault.getReceipt('keep'), LockedError);
+    await vault.unlock(NEXT);
+    deepEqual(Array.from(await vault.getReceipt('keep')), [7, 7, 7]);
+
+    equal(await vault.cleanupReceipts(), 1);
+    equal(await vault.getReceipt('orphan'), null);
+    deepEqual(Array.from(await vault.getReceipt('keep')), [7, 7, 7]);
+
+    await vault.deleteReceipt('keep');
+    equal(await vault.countReceipts(), 0);
+    await vault.putReceipt('again', new Uint8Array([1]));
+    await vault.wipe();
+    equal((await store.keys()).length, 0);
+  }));

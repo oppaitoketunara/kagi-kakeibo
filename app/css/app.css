@@ -53,6 +53,13 @@
   }
 }
 
+@media (prefers-color-scheme: dark) {
+  /* 暗い画面では、同じ色を少し明るくして沈まないようにする */
+  [class*="hue-"] {
+    --hue-fill: color-mix(in oklab, var(--hue) 80%, white);
+  }
+}
+
 /* ------------------------------------------------------------------ 基本 */
 
 *,
@@ -921,9 +928,86 @@ input[type="date"].input::-webkit-date-and-time-value {
   line-height: 1;
 }
 
-.badge-income {
-  background: color-mix(in oklab, var(--status-good) 16%, var(--surface));
-  color: var(--good-text);
+/* カテゴリの色。白い文字を載せても読める濃さ(コントラスト 4.5:1 以上)でそろえてある。 */
+.hue-orange {
+  --hue: #c2410c;
+}
+
+.hue-amber {
+  --hue: #b45309;
+}
+
+.hue-lime {
+  --hue: #4d7c0f;
+}
+
+.hue-green {
+  --hue: #15803d;
+}
+
+.hue-emerald {
+  --hue: #047857;
+}
+
+.hue-teal {
+  --hue: #0f766e;
+}
+
+.hue-cyan {
+  --hue: #0e7490;
+}
+
+.hue-sky {
+  --hue: #0369a1;
+}
+
+.hue-blue {
+  --hue: #1d4ed8;
+}
+
+.hue-indigo {
+  --hue: #4338ca;
+}
+
+.hue-violet {
+  --hue: #6d28d9;
+}
+
+.hue-purple {
+  --hue: #7e22ce;
+}
+
+.hue-fuchsia {
+  --hue: #a21caf;
+}
+
+.hue-pink {
+  --hue: #be185d;
+}
+
+.hue-rose {
+  --hue: #be123c;
+}
+
+.hue-red {
+  --hue: #b91c1c;
+}
+
+.hue-slate {
+  --hue: #475569;
+}
+
+.hue-stone {
+  --hue: #57534e;
+}
+
+[class*="hue-"] {
+  --hue-fill: var(--hue);
+}
+
+.badge[class*="hue-"] {
+  background: var(--hue-fill);
+  color: #fff;
 }
 
 .row-main {
@@ -1136,15 +1220,80 @@ input[type="date"].input::-webkit-date-and-time-value {
 }
 
 .chip[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  border-color: var(--hue-fill, var(--accent));
+  background: color-mix(in oklab, var(--hue-fill, var(--accent)) 14%, var(--surface));
   color: var(--ink);
   font-weight: 600;
 }
 
-.chip[aria-pressed="true"] .badge {
-  background: var(--accent-strong);
+/* レシートの写真 */
+.receipt-thumb-btn {
+  justify-self: start;
+  overflow: hidden;
+  border: 1px solid var(--axis);
+  border-radius: 12px;
+  line-height: 0;
+}
+
+.receipt-thumb {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 180px;
+}
+
+.receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.receipt-frame {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+  background: var(--surface-2);
+}
+
+.receipt-full {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.receipt-frame.is-zoomed .receipt-full {
+  width: 220%;
+}
+
+.row-mark {
+  display: inline-flex;
+  margin-left: 6px;
+  color: var(--ink-3);
+  vertical-align: -2px;
+}
+
+/* 色の選択 */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.swatch {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--hue-fill);
+  color: transparent;
+}
+
+.swatch[aria-pressed="true"] {
   color: #fff;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--hue-fill);
 }
 
 /* ------------------------------------------------------------------ 分析 */
@@ -1231,7 +1380,7 @@ input[type="date"].input::-webkit-date-and-time-value {
   min-width: 3px;
   height: 100%;
   border-radius: 0 4px 4px 0;
-  background: var(--accent);
+  background: var(--hue-fill, var(--accent));
 }
 
 .rank-row:hover .rank-bar,

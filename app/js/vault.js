@@ -14,13 +14,18 @@ import {
   encryptData,
   envelopeFromJson,
   envelopeToJson,
+  fromBase64,
+  importDataKey,
+  openBytes,
   randomBytes,
+  sealBytes,
   unlockKeys,
 } from './crypto.js';
 import { validateState } from './model.js';
 
 const VAULT_KEY = 'vault';
 const THROTTLE_KEY = 'throttle';
+const RECEIPT_PREFIX = 'receipt:';
 
 /** 暗号文の長さから記録件数を推測しにくくするため、平文をこの単位に切り上げる。 */
 const PAD_BLOCK = 4096;
@@ -313,6 +318,72 @@ export class Vault {
       } finally {
         plaintext.fill(0);
       }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // レシート写真: 1 枚ずつ、保管庫の中にしまってある鍵で暗号化して別レコードに置く
+  // (記録を保存するたびに、写真まで暗号化し直さなくて済むように)
+  // -------------------------------------------------------------------------
+
+  async #mediaKey(session) {
+    const raw = session.state.mediaKey;
+    if (session.media === undefined || session.media.raw !== raw) {
+      session.media = { raw, key: await importDataKey(fromBase64(raw)) };
+    }
+    return session.media.key;
+  }
+
+  /** 写真(JPEG のバイト列)を暗号化して保存する。 */
+  putReceipt(id, bytes) {
+    const session = this.#session;
+    if (session === null) return Promise.reject(new LockedError());
+    return this.#enqueue(async () => {
+      const box = await sealBytes(await this.#mediaKey(session), bytes, `receipt|${id}`);
+      await this.#store.put(RECEIPT_PREFIX + id, box);
+    });
+  }
+
+  /** 写真を復号して返す。この端末にない場合は null。 */
+  getReceipt(id) {
+    const session = this.#session;
+    if (session === null) return Promise.reject(new LockedError());
+    return this.#enqueue(async () => {
+      const box = await this.#store.get(RECEIPT_PREFIX + id);
+      if (box === undefined) return null;
+      return openBytes(await this.#mediaKey(session), box, `receipt|${id}`);
+    });
+  }
+
+  deleteReceipt(id) {
+    return this.#enqueue(() => this.#store.delete(RECEIPT_PREFIX + id));
+  }
+
+  /** どの記録からも参照されていない写真を消す(保存に失敗して残ったものなど)。消した枚数を返す。 */
+  cleanupReceipts() {
+    const session = this.#session;
+    if (session === null) return Promise.reject(new LockedError());
+    return this.#enqueue(async () => {
+      const used = new Set();
+      for (const item of session.state.transactions) {
+        if (item.receiptId !== null) used.add(RECEIPT_PREFIX + item.receiptId);
+      }
+      let removed = 0;
+      for (const key of await this.#store.keys()) {
+        if (typeof key === 'string' && key.startsWith(RECEIPT_PREFIX) && !used.has(key)) {
+          await this.#store.delete(key);
+          removed += 1;
+        }
+      }
+      return removed;
+    });
+  }
+
+  /** この端末に保存されている写真の枚数。 */
+  countReceipts() {
+    return this.#enqueue(async () => {
+      const keys = await this.#store.keys();
+      return keys.filter((key) => typeof key === 'string' && key.startsWith(RECEIPT_PREFIX)).length;
     });
   }
 

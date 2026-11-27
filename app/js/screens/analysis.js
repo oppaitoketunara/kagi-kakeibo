@@ -1,14 +1,15 @@
 // かぎ家計簿 — 分析(カテゴリ別の内訳と、月ごとの推移)
 //
 // グラフの方針
-//   - カテゴリ別: 名前のある項目どうしの比較なので、大きい順の横棒。色は 1 色(棒の長さがすでに金額を表している)。
+//   - カテゴリ別: 名前のある項目どうしの比較なので、大きい順の横棒。棒はそのカテゴリの色(入力画面や一覧のバッジと同じ色)。
+//     色だけでは見分けにくい組み合わせもあるので、必ず頭文字のバッジと名前を並べる。
 //   - 月ごとの推移: 見ている月だけを強調色、ほかの月は灰色。
 //   - 数値は必ず文字でも読める(行の金額、棒の上のラベル、表)。色やホバーだけに頼らない。
 
 import { h, icon, openDialog } from '../dom.js';
 import { formatAxisYen, formatCompactYen, formatDay, formatMonth, formatPercent, niceScale } from '../format.js';
 import { monthlyTotals, summarizeMonth, transactionsOfMonth } from '../model.js';
-import { monthSwitcher, segmented } from './common.js';
+import { categoryBadge, hueClass, monthSwitcher, segmented } from './common.js';
 
 const TYPE_LABEL = { expense: '支出', income: '収入' };
 const TREND_MONTHS = 6;
@@ -76,8 +77,8 @@ function rankedBars(app, rows) {
         null,
         h(
           'button',
-          { class: 'rank-row', type: 'button', on: { click: () => openCategorySheet(app, row) } },
-          h('span', { class: 'badge', 'aria-hidden': 'true' }, row.category.mark),
+          { class: `rank-row ${hueClass(row.category)}`, type: 'button', on: { click: () => openCategorySheet(app, row) } },
+          categoryBadge(row.category),
           h(
             'span',
             { class: 'rank-main' },
